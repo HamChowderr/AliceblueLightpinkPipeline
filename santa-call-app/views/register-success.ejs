@@ -1,0 +1,98 @@
+const express = require('express');
+const session = require('express-session');
+const flash = require('connect-flash');
+const axios = require('axios'); // Import axios to make API requests
+
+const app = express();
+
+app.set('view engine', 'ejs');
+app.use(express.urlencoded({ extended: true }));
+
+// Set up express session
+app.use(
+  session({
+    secret: 'santa-secret-key',
+    resave: true,
+    saveUninitialized: true,
+  })
+);
+app.use(flash());
+
+// Home Page
+app.get('/', (req, res) => {
+  res.render('form');
+});
+
+// Registration Page
+app.get('/register', (req, res) => {
+  res.render('register');
+});
+
+// Handle Registration
+app.post('/register-success', async (req, res) => {
+  const { name, phone, email } = req.body;
+
+  try {
+    // Step 1: Save Parent Data to AITable
+    const data = {
+      records: [
+        {
+          fields: {
+            "Parent Info": name,
+            "Phone Number": phone,
+            "Email": email,
+          },
+        },
+      ],
+      fieldKey: "name",
+    };
+
+    // Send data to AITable using Axios
+    await axios.post(
+      "https://aitable.ai/fusion/v1/datasheets/dstuWD0D3ky2mPJvja/records?viewId=viwzgLPE5V8Yr&fieldKey=name",
+      data,
+      {
+        headers: {
+          Authorization: "Bearer uskbSSdGVf3VDRXEoXoYTaI", // Replace with your real token
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    // Step 2: Retrieve the Record from AITable to Get the ParentID using Name
+    const response = await axios.get(
+      `https://aitable.ai/fusion/v1/datasheets/dstuWD0D3ky2mPJvja/records`,
+      {
+        params: {
+          viewId: "viwzgLPE5V8Yr",
+          filterByFormula: `{Parent Info} = "${name}"`, // Use name to filter records
+          fieldKey: "name"
+        },
+        headers: {
+          Authorization: "Bearer uskbSSdGVf3VDRXEoXoYTaI",
+        },
+      }
+    );
+
+    // Assume the record with the matching name is returned (simplified for demo purposes)
+    const records = response.data.records;
+
+    if (records.length === 0) {
+      throw new Error("No record found for the provided name.");
+    }
+
+    const parentID = records[0].fields.ParentID;
+
+    // Step 3: Render the success page and include the ParentID
+    res.render('registerSuccess', { name, parentID });
+  } catch (error) {
+    console.error("Error saving or retrieving data from AITable:", error.response ? error.response.data : error);
+    res.send('Error registering. Please try again.');
+  }
+});
+
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
